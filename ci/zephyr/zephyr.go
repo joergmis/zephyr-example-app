@@ -1,59 +1,12 @@
-package image
-
-import "fmt"
-
-/* Generated from here (with manual modifications)
-
-package main
+package zephyr
 
 import (
-	"bufio"
-	"bytes"
-	"os"
-	"text/template"
+	"fmt"
+
+	"dagger.io/dagger"
 )
 
-const tmplString = `
-
-func (image *Image) With{{ .Name }}() *Image {
-	image.container = image.container.
-        WithExec([]string{
-            "apt-get", "install", "--yes", "{{ .Name }}",
-        })
-
-	return image
-}
-`
-
-func main() {
-	tmpl, err := template.New("boilerplate").Parse(tmplString)
-	if err != nil {
-		panic(err)
-	}
-
-	file, err := os.Open("dependencies.txt")
-	if err != nil {
-		panic(err)
-	}
-
-	var buf bytes.Buffer
-
-	scanner := bufio.NewScanner(file)
-
-	for scanner.Scan() {
-		name := scanner.Text()
-		if err := tmpl.Execute(&buf, struct{ Name string }{name}); err != nil {
-			panic(err)
-		}
-	}
-
-	if err := os.WriteFile("dependencies.go", buf.Bytes(), 0644); err != nil {
-		panic(err)
-	}
-}
-*/
-
-func (image *Image) ZephyrBase(zephyrSDKVersion string) *Image {
+func (image *Image) AddZephyrDependencies(zephyrSDKVersion string) *Image {
 	image.container = image.Ubuntu().
 		WithAptUpdate().
 		WithSoftwarePropertiesCommon().
@@ -802,8 +755,6 @@ func (image *Image) WithLocaleGen() *Image {
 
 func (image *Image) WithZephyrSDK(zephyrSDKVersion string) *Image {
 	image.container = image.container.WithExec([]string{
-		"echo", fmt.Sprintf("install zephyr sdk version %s", zephyrSDKVersion),
-	}).WithExec([]string{
 		"wget", "--quiet", fmt.Sprintf("https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v%s/zephyr-sdk-%s_linux-x86_64_minimal.tar.xz", zephyrSDKVersion, zephyrSDKVersion),
 	}).WithExec([]string{
 		"wget", "--quiet", "-O", "shasum.txt", fmt.Sprintf("https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v%s/sha256.sum", zephyrSDKVersion),
@@ -840,6 +791,57 @@ func (image *Image) WithPythonDepdencies() *Image {
 	}).WithExec([]string{
 		"pip3", "check",
 	})
+
+	return image
+}
+
+func (image *Image) AddSourceCode() *Image {
+	source := image.dag.Host().Directory(".", dagger.HostDirectoryOpts{
+		Exclude: []string{
+			"ci",
+			"build*",
+			"binaries",
+			"twister*",
+		},
+	})
+
+	image.container = image.container.
+		WithDirectory("/zephyr/src", source).
+		WithWorkdir("/zephyr")
+
+	return image
+}
+
+func (image *Image) SetupZephyrModules() *Image {
+	image.container = image.container.
+		WithMountedCache("/zephyr/modules", image.dag.CacheVolume("zephyr-modules")).
+		WithMountedCache("/zephyr/zephyr", image.dag.CacheVolume("zephyr")).
+		WithWorkdir("/zephyr").
+		WithExec([]string{
+			"west", "init", "-l", "src",
+		}).WithExec([]string{
+		"west", "update",
+	})
+
+	return image
+}
+
+func (image *Image) BuildApp() *Image {
+	image.container = image.container.
+		WithWorkdir("/zephyr/src").
+		WithExec([]string{
+			"west", "build", "-b", "custom_plank", "app",
+		})
+
+	return image
+}
+
+func (image *Image) ExportBinaries() *Image {
+	dir := image.container.Directory("/zephyr/src/build/zephyr")
+
+	if _, err := dir.Export(image.ctx, "./artifacts"); err != nil {
+		panic(err)
+	}
 
 	return image
 }

@@ -1,12 +1,13 @@
-package image
+package zephyr
 
-func (image *Image) ZephyrTest() *Image {
+func (image *Image) AddTestDependencies() *Image {
 	image.container = image.
 		WithRubyFull().
 		WithLibasioDev().
 		WithLibGtestDev().
 		WithLibTclapDev().
 		WithCucumberGems().
+		WithBashrc().
 		container
 
 	return image
@@ -58,10 +59,40 @@ func (image *Image) WithNlohmannJson3Dev() *Image {
 }
 
 func (image *Image) WithCucumberGems() *Image {
-	image.container = image.WithRubyFull().container.
+	image.container = image.container.
 		WithExec([]string{
 			"gem", "install", "cucumber:7.1.0", "cucumber-wire:6.2.1",
 		})
+
+	return image
+}
+
+func (image *Image) WithBashrc() *Image {
+	image.container = image.container.WithExec([]string{
+		"sh", "-c", "echo 'source ../zephyr/zephyr-env.sh' >> $HOME/.bashrc",
+	}).WithExec([]string{
+		"sh", "-c", "echo 'source $HOME/.zephyr' >> $HOME/.bashrc",
+	})
+
+	return image
+}
+
+func (image *Image) RunTests() *Image {
+	image.container = image.container.
+		WithWorkdir("/zephyr/src").
+		WithExec([]string{
+			"bash", "-c", "west twister -p custom_plank -T ./tests",
+		})
+
+	return image
+}
+
+func (image *Image) ExportTestReports() *Image {
+	dir := image.container.Directory("/zephyr/src/twister-out")
+
+	if _, err := dir.Export(image.ctx, "./artifacts"); err != nil {
+		panic(err)
+	}
 
 	return image
 }

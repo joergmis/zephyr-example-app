@@ -1,4 +1,4 @@
-package image
+package zephyr
 
 import (
 	"context"
@@ -24,6 +24,8 @@ func (image *Image) NewContainer() *dagger.Container {
 		WithEnvVariable("DEBIAN_FRONTEND", "noninteractive")
 }
 
+// OK forces the container to be built in case you don't publish the image to a
+// registry.
 func (image *Image) OK() *Image {
 	fmt.Println(image.container.Stdout(image.ctx))
 

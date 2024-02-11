@@ -19,12 +19,17 @@ jobs:
       - name: Install Dagger CLI
         run: cd /usr/local && { curl -L https://dl.dagger.io/dagger/install.sh | sh; cd -; }
 
-      - name: Run Dagger pipeline
-        run: dagger run go run ci/main.go
+      - name: Build the application
+        run: dagger run go run ci/main.go -build=true
+
+      - name: Run the tests
+        run: dagger run go run ci/main.go -test=true
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v3
         with:
-          name: zephyr-example-app
-          path: ./binaries/zephyr.hex
+          name: artifacts
+          path: |
+            ./artifacts/zephyr.hex
+            ./artifacts/twister_report.xml
           retention-days: 1
